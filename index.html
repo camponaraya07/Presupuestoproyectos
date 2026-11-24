@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestión de obras</title>
+<style>
+:root{--bg:#f5f5f2;--card:#fff;--tx:#1d1d1b;--mut:#6b6b66;--bd:#e2e1dc;--ac:#1f6f5c;--acx:#fff;--ok:#1f7a4d;--okb:#e1f3e8;--wa:#8a5a00;--wab:#fcefd2;--ba:#a12a2a;--bab:#fbe3e1;--ne:#555;--neb:#ecebe7}
+@media(prefers-color-scheme:dark){:root{--bg:#161615;--card:#212120;--tx:#ecebe6;--mut:#a09f98;--bd:#33332f;--ac:#4fb59c;--acx:#0d1f1a;--ok:#7fd3a3;--okb:#1d3527;--wa:#e8bf62;--wab:#3a2f12;--ba:#f19a94;--bab:#3d1d1b;--ne:#bbb;--neb:#2e2e2b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:76px}
+.wrap{max-width:760px;margin:0 auto;padding:12px}
+h1{font-size:20px;margin:6px 0 12px}h2{font-size:16px;margin:16px 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.mut{color:var(--mut);font-size:13px}.b{font-weight:600}.r{text-align:right}
+button,.btn{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:8px 12px;border-radius:9px;cursor:pointer}
+button.p{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
+button.d{color:var(--ba)}button.s{padding:5px 9px;font-size:13px}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.badge{font-size:12px;padding:2px 8px;border-radius:99px;background:var(--neb);color:var(--ne);white-space:nowrap}
+.badge.ok{background:var(--okb);color:var(--ok)}.badge.wa{background:var(--wab);color:var(--wa)}.badge.ba{background:var(--bab);color:var(--ba)}
+nav.bot{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--bd);display:flex;justify-content:center;z-index:5}
+nav.bot button{flex:1;max-width:200px;border:0;border-radius:0;background:none;padding:14px 4px;color:var(--mut)}
+nav.bot button.on{color:var(--ac);font-weight:700}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:10px 0;padding-bottom:4px}
+.tabs button{white-space:nowrap;padding:6px 12px;border-radius:99px}
+.tabs button.on{background:var(--ac);color:var(--acx);border-color:var(--ac)}
+.bar{height:6px;background:var(--neb);border-radius:9px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:var(--ac)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.kpi{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px}.kpi b{display:block;font-size:18px}
+.neg{color:var(--ba)}.pos{color:var(--ok)}
+.ln{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0;border-top:1px dashed var(--bd)}
+details summary{cursor:pointer;color:var(--mut);font-size:13px;margin-top:8px}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:760px;max-height:94vh;overflow:auto;border-radius:16px 16px 0 0;padding:14px}
+label{display:block;font-size:13px;color:var(--mut);margin:8px 0 3px}
+input,select,textarea{font:inherit;width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+.lrow{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:8px;margin-bottom:8px;display:grid;gap:6px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.g3 label{margin:0 0 2px;font-size:11px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;background:var(--tx);color:var(--bg);padding:8px 14px;border-radius:9px;z-index:40;font-size:14px;max-width:90vw}
+.banner{background:var(--wab);color:var(--wa);padding:8px 12px;border-radius:9px;margin-bottom:10px;font-size:13px}
+.empty{text-align:center;color:var(--mut);padding:24px 8px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<nav class="bot" id="nav"></nav>
+<div id="modal"></div>
+<script src="shim.js"></script>
+<script>
+const COLS=['settings','projects','catalog','quotes','materials','notes','invoices','entries'];
+const state={};COLS.forEach(c=>state[c]=[]);
+let db=null,dl=null,dic=null,micT=null,loaded=0,loadErr='';
+const view={tab:'proj',pid:null,sub:'presu',ef:'all'};
+const QL={draft:'Borrador',sent:'Enviado',accepted:'Aceptado',rejected:'Rechazado',expired:'Caducado'};
+const ML={pending:'Pendiente',partially_received:'Parcial',completed:'Completado',cancelled:'Cancelado'};
+const NL={draft:'Pendiente de revisión',verified:'Validado',invoiced:'Facturado por proveedor'};
+const IL={draft:'Borrador',issued:'Emitida',paid:'Cobrada',rectified:'Rectificada',void:'Anulada'};
+const EL={provisional:'Previsión',posted:'Contabilizado',reconciled:'Conciliado'};
+const PL={prep:'Preparación',ejecucion:'En ejecución',finalizado:'Finalizado',cerrado:'Cerrado'};
+const KL={material:'Material',labor:'Mano de obra',service:'Servicio'};
+const UNITS=['ud','m','m²','m³','kg','l','h','global'];
+const GOOD=['accepted','completed','verified','paid','posted','reconciled','ejecucion','finalizado'],WARN=['sent','partially_received','issued','provisional','invoiced','prep'],BAD=['rejected','cancelled','void','rectified','expired'];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur=n=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(+n||0);
+const num=n=>new Intl.NumberFormat('es-ES',{maximumFractionDigits:2}).format(+n||0);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const today=()=>new Date().toLocaleDateString('sv');
+const fdate=d=>d?new Date(d+'T00:00').toLocaleDateString('es-ES'):'';
+const badge=(s,l)=>`<span class="badge ${GOOD.includes(s)?'ok':WARN.includes(s)?'wa':BAD.includes(s)?'ba':''}">${esc(l[s]||s)}</span>`;
+const lb=l=>(+l.qty||0)*(+l.price||0)*(1-(+l.disc||0)/100);
+const tot=ls=>{let b=0,i=0;(ls||[]).forEach(l=>{const x=lb(l);b+=x;i+=x*(+l.iva||0)/100});return{base:b,iva:i,total:b+i}};
+const me=()=>state.settings.find(x=>x.id==='me')||{};
+const clientOf=p=>({name:p.client||'',nif:p.nif||'',email:p.email||'',phone:p.phone||'',address:p.caddr||''});
+const by=(c,id)=>state[c].find(x=>x.id===id);
+const ofp=(c,pid)=>state[c].filter(x=>x.pid===pid);
+
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2800)}
+async function put(col,o){
+  o=JSON.parse(JSON.stringify(o));if(!o.id)o.id=uid();
+  if(db){const b={...o};delete b.id;try{await db.collection(col).doc(o.id).set(b)}catch(e){toast('No se pudo guardar ('+(e.code||e.message)+')')}}
+  else{const a=state[col],i=a.findIndex(x=>x.id===o.id);i>=0?a[i]=o:a.push(o);render()}
+  return o;
+}
+async function del(col,id){
+  if(db){try{await db.collection(col).doc(id).delete()}catch(e){toast('No se pudo borrar')}}
+  else{state[col]=state[col].filter(x=>x.id!==id);render()}
+}
+
+/* ---------- códigos de barras ---------- */
+const _sc={};
+const loadJs=u=>_sc[u]||(_sc[u]=new Promise((ok,ko)=>{const x=document.createElement('script');x.src=u;x.onload=ok;x.onerror=()=>ko(new Error('carga'));document.head.appendChild(x)}));
+const newCode=()=>'OBR'+Date.now().toString().slice(-8);
+async function drawBarcode(svg,code){
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js');
+  const fmt=/^\d{13}$/.test(code)?'EAN13':'CODE128';
+  try{JsBarcode(svg,code,{format:fmt,displayValue:true,height:70,margin:6})}catch(e){JsBarcode(svg,code,{format:'CODE128',displayValue:true,height:70,margin:6})}
+}
+async function decodeImage(file){
+  if('BarcodeDetector' in window){try{const r=await new BarcodeDetector().detect(await createImageBitmap(file));if(r.length)return r[0].rawValue}catch(e){}}
+  await loadJs('https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js');
+  const url=URL.createObjectURL(file);
+  try{const r=await new ZXing.BrowserMultiFormatReader().decodeFromImageUrl(url);return r.getText()}catch(e){return null}finally{URL.revokeObjectURL(url)}
+}
+function scanCode(){
+  return new Promise(res=>{
+    openModal(`<h2>Escanear código</h2><p class="mut">Haz una foto al código de barras (se lee de la imagen), o escríbelo / usa un lector USB o Bluetooth en el campo.</p>
+    <label>Foto del código</label><input type="file" accept="image/*" capture="environment" id="f">
+    <label>O escribe / escanea con lector</label><input id="t" placeholder="Código" autocomplete="off"><div class="mut" id="m"></div>
+    <div class="acts"><button class="p" id="ok">Usar código</button><button id="no">Cancelar</button></div>`,(s,close)=>{
+      const t=s.querySelector('#t'),m=s.querySelector('#m');
+      const done=v=>{close();res(v)};
+      s.querySelector('#f').onchange=async e=>{const f=e.target.files[0];if(!f)return;m.textContent='Leyendo…';
+        const c=await decodeImage(f).catch(()=>null);if(c)done(c);else m.textContent='No se pudo leer. Acércate, enfoca bien o escribe el código.'};
+      t.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();t.value.trim()&&done(t.value.trim())}};
+      s.querySelector('#ok').onclick=()=>t.value.trim()?done(t.value.trim()):m.textContent='Escribe un código';
+      s.querySelector('#no').onclick=()=>done(null);t.focus();
+    });
+  });
+}
+
+/* ---------- dictado ---------- */
+const micBtn=()=>dic?'<button type="button" class="s mic" style="margin-top:4px">🎙 Dictar</button>':'';
+function micLabels(on){document.querySelectorAll('.mic').forEach(b=>b.textContent=on?'⏹ Parar':'🎙 Dictar')}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.mic');if(!b||!dic)return;
+  if(dic.active()){dic.stop().catch(()=>{});return}
+  micT=b.previousElementSibling;
+  dic.start({language:'es'}).catch(x=>{if(x.code==='not_granted')toast('Micrófono no permitido');else if(x.code==='unavailable')toast('Dictado no disponible aquí');else if(x.code!=='stopped'&&x.code!=='dismissed')toast('No se pudo iniciar el dictado')});
+});
+function initDictation(){
+  dic.onFinal(({text})=>{if(!micT||!micT.isConnected)return;const t=micT.value?text:text.trimStart();micT.value+=t;micT.dispatchEvent(new Event('input',{bubbles:true}))});
+  dic.onState(({state})=>micLabels(state==='listening'||state==='starting'));
+}
+
+/* ---------- modales ---------- */
+function openModal(html,mount){
+  const o=document.createElement('div');o.className='ov';o.innerHTML=`<div class="sheet">${html}</div>`;
+  o.addEventListener('mousedown',e=>{if(e.target===o)close()});
+  document.getElementById('modal').appendChild(o);
+  const close=()=>o.remove();mount&&mount(o.firstChild,close);return close;
+}
+function confirmBox(msg,okLabel='Confirmar'){
+  return new Promise(res=>{
+    openModal(`<p>${esc(msg)}</p><div class="acts"><button class="p" id="y">${esc(okLabel)}</button><button id="n">Cancelar</button></div>`,(s,close)=>{
+      s.querySelector('#y').onclick=()=>{close();res(true)};s.querySelector('#n').onclick=()=>{close();res(false)};
+    });
+  });
+}
+function formModal({title,fields,values={},submit='Guardar',onSubmit}){
+  const f=fields.map(x=>{
+    const v=values[x.n]??x.d??'';let inp;
+    if(x.t==='select')inp=`<select name="${x.n}">${x.o.map(([k,l])=>`<option value="${esc(k)}" ${k==v?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+    else if(x.t==='textarea')inp=`<textarea name="${x.n}" rows="3">${esc(v)}</textarea>${micBtn()}`;
+    else inp=`<input name="${x.n}" type="${x.t||'text'}" ${x.t==='number'?'step="any" inputmode="decimal"':''} value="${esc(v)}" ${x.r?'required':''}>`;
+    return `<label>${esc(x.l)}</label>${inp}`}).join('');
+  openModal(`<h2>${esc(title)}</h2><form>${f}<div class="acts"><button class="p">${esc(submit)}</button><button type="button" data-x>Cancelar</button></div></form>`,(s,close)=>{
+    s.querySelector('[data-x]').onclick=close;
+    s.querySelector('form').onsubmit=async e=>{e.preventDefault();const o={};
+      fields.forEach(x=>{const el=s.querySelector(`[name="${x.n}"]`);o[x.n]=x.t==='number'?(parseFloat(String(el.value).replace(',','.'))||0):el.value.trim()});
+      close();await onSubmit(o)};
+  });
+}
+
+/* ---------- editor de líneas ---------- */
+function linesModal({title,lines,mode,pid,onSave}){
+  let L=JSON.parse(JSON.stringify(lines||[]));
+  const cat=state.catalog,mats=ofp('materials',pid).filter(m=>m.manual!=='cancelled');
+  const sel=(f,i,v,opts)=>`<select data-i="${i}" data-f="${f}">${opts.map(o=>`<option ${o==v?'selected':''}>${o}</option>`).join('')}</select>`;
+  openModal(`<h2>${esc(title)}</h2><input id="cq" type="search" placeholder="${mode==='note'?'Buscar material…':'Buscar en el catálogo (nombre, código, proveedor)…'}" style="margin-bottom:8px"><div id="rows"></div><div class="acts"><button id="add">+ Añadir línea</button><button id="scan">Escanear código</button></div>
+    <div class="card" style="margin-top:10px"><div class="row"><span class="mut">Base</span><b id="tb"></b></div><div class="row"><span class="mut">IVA</span><b id="ti"></b></div><div class="row"><span>Total</span><b id="tt"></b></div></div>
+    <div class="acts"><button class="p" id="ok">Guardar líneas</button><button id="no">Cancelar</button></div>`,(s,close)=>{
+    const rows=s.querySelector('#rows');let q='';
+    const hit=(...v)=>!q||v.some(x=>String(x||'').toLowerCase().includes(q));
+    const totals=()=>{const t=tot(L);s.querySelector('#tb').textContent=eur(t.base);s.querySelector('#ti').textContent=eur(t.iva);s.querySelector('#tt').textContent=eur(t.total)};
+    const draw=()=>{
+      rows.innerHTML=L.map((l,i)=>{
+        const pick=mode==='note'
+          ?`<select data-pick="${i}"><option value="">— Material del listado (opcional) —</option>${mats.filter(m=>m.id===l.mat||hit(m.desc)).map(m=>`<option value="${m.id}" ${m.id===l.mat?'selected':''}>${esc(m.desc)}</option>`).join('')}</select>`
+          :`<select data-pick="${i}"><option value="">— Del catálogo (opcional) —</option>${cat.filter(c=>c.id===l.cat||hit(c.name,c.code,c.source)).map(c=>`<option value="${c.id}" ${c.id===l.cat?'selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
+        const inp=(f,lab,step='any')=>`<div><label>${lab}</label><input data-i="${i}" data-f="${f}" type="number" step="${step}" inputmode="decimal" value="${l[f]??''}"></div>`;
+        return `<div class="lrow">${pick}<div style="display:flex;gap:6px"><input data-i="${i}" data-f="desc" placeholder="Descripción" value="${esc(l.desc)}">${micBtn()}</div>
+          <div class="g3">${inp('qty','Cantidad')}<div><label>Unidad</label>${sel('unit',i,l.unit||'ud',UNITS)}</div>${inp('price',mode==='note'?'Coste unit. real':'Precio unit.')}</div>
+          <div class="g3">${mode!=='note'?inp('disc','Dto. %'):'<div></div>'}${inp('iva','IVA %')}${mode==='quote'?`<div><label>Tipo</label><select data-i="${i}" data-f="kind">${Object.entries(KL).map(([k,v])=>`<option value="${k}" ${k===l.kind?'selected':''}>${v}</option>`).join('')}</select></div>`:'<div></div>'}</div>
+          ${mode==='quote'?`<div class="g3">${inp('cost','Coste est. unit.')}<div class="mut" style="grid-column:span 2;align-self:end">Total línea: <b>${eur(lb(l)*(1+(+l.iva||0)/100))}</b></div></div>`:`<div class="mut">Total línea: <b>${eur(lb(l)*(1+(+l.iva||0)/100))}</b></div>`}
+          <button class="s d" data-rm="${i}">Quitar línea</button></div>`}).join('')||'<div class="empty">Sin líneas</div>';
+      totals();
+    };
+    rows.addEventListener('input',e=>{const t=e.target,i=t.dataset.i,f=t.dataset.f;if(i==null||!f)return;
+      L[i][f]=t.type==='number'?(parseFloat(t.value)||0):t.value;totals()});
+    rows.addEventListener('change',e=>{const t=e.target;
+      if(t.dataset.pick!=null){const l=L[t.dataset.pick];
+        if(mode==='note'){l.mat=t.value;const m=by('materials',t.value);if(m){l.desc=l.desc||m.desc;l.unit=m.unit}}
+        else{const c=by('catalog',t.value);l.cat=t.value;if(c){l.desc=c.name;l.unit=c.unit;l.price=c.price;l.iva=c.iva;if(mode==='quote'){l.kind=c.kind||'material'}}}
+        draw()}
+      else if(t.dataset.f==='kind'||t.dataset.f==='unit'){L[t.dataset.i][t.dataset.f]=t.value;draw()}else if(t.dataset.f)draw()});
+    rows.addEventListener('click',e=>{const r=e.target.dataset.rm;if(r!=null){L.splice(+r,1);draw()}});
+    s.querySelector('#cq').oninput=e=>{q=e.target.value.toLowerCase().trim();draw()};
+    s.querySelector('#add').onclick=()=>{L.push({id:uid(),desc:'',qty:1,unit:'ud',price:0,disc:0,iva:21,kind:'material',cost:0,cat:'',mat:''});draw()};
+    s.querySelector('#scan').onclick=async()=>{
+      const code=await scanCode();if(!code)return;const c=cat.find(x=>x.code===code);
+      if(!c)return toast('Código no encontrado en el catálogo');
+      if(mode==='note'){const m=mats.find(x=>x.cat===c.id||x.desc.trim().toLowerCase()===c.name.trim().toLowerCase());
+        L.push({id:uid(),desc:m?m.desc:c.name,qty:1,unit:m?m.unit:c.unit,price:c.price,iva:c.iva,mat:m?m.id:'',cat:c.id});if(!m)toast('Añadido sin vincular a ningún material')}
+      else L.push({id:uid(),desc:c.name,qty:1,unit:c.unit,price:c.price,disc:0,iva:c.iva,kind:c.kind||'material',cost:0,cat:c.id});
+      draw()};
+    s.querySelector('#no').onclick=close;
+    s.querySelector('#ok').onclick=async()=>{L=L.filter(l=>l.desc.trim()||l.qty);close();await onSave(L)};
+    draw();
+  });
+}
+
+/* ---------- lógica de negocio ---------- */
+const received=m=>state.notes.filter(n=>n.pid===m.pid).reduce((a,n)=>a+(n.lines||[]).filter(l=>l.mat===m.id).reduce((x,l)=>x+(+l.qty||0),0),0);
+function mstatus(m){const r=received(m);if(m.manual==='cancelled')return'cancelled';if(m.manual==='closed'||r>=m.planned-1e-9)return'completed';return r>0?'partially_received':'pending'}
+async function acceptQuote(q){
+  if(state.quotes.some(x=>x.pid===q.pid&&x.status==='accepted'&&x.id!==q.id))return toast('Ya hay un presupuesto aceptado en este proyecto. Rechaza o caduca ese antes.');
+  await put('quotes',{...q,status:'accepted',acceptedAt:today()});
+  const g={};
+  (q.lines||[]).filter(l=>l.kind==='material').forEach(l=>{const k=(l.cat||l.desc.trim().toLowerCase())+'|'+l.unit;const x=g[k]||(g[k]={desc:l.desc,unit:l.unit,cat:l.cat||'',planned:0,lineIds:[]});x.planned+=+l.qty||0;x.lineIds.push(l.id)});
+  for(const x of Object.values(g))await put('materials',{id:uid(),pid:q.pid,qid:q.id,...x,manual:''});
+  const p=by('projects',q.pid);if(p&&p.status==='prep')await put('projects',{...p,status:'ejecucion'});
+  toast('Aceptado: listado de materiales generado');
+}
+async function syncNoteEntry(n){
+  const t=tot((n.lines||[]).map(l=>({qty:l.qty,price:l.price,disc:0,iva:l.iva})));
+  const old=by('entries','n-'+n.id);
+  let st=n.status==='draft'?'provisional':'posted';if(old&&old.status==='reconciled'&&st==='posted')st='reconciled';
+  await put('entries',{id:'n-'+n.id,type:'expense',date:n.date,concept:`Albarán ${n.number||'s/n'} · ${n.supplier}`,base:t.base,iva:t.iva,total:t.total,cat:'Materiales',status:st,pid:n.pid,ref:{kind:'note',id:n.id}});
+}
+async function issueInvoice(inv){
+  if(!(inv.lines||[]).length)return toast('Añade líneas antes de emitir');
+  const isR=!!inv.rectifies,prefix=(isR?'R-':'F-')+new Date().getFullYear()+'-';
+  const seq=state.invoices.filter(i=>i.number&&i.number.startsWith(prefix)).map(i=>+i.number.slice(prefix.length)||0);
+  const number=prefix+String(Math.max(0,...seq)+1).padStart(4,'0'),t=tot(inv.lines);
+  const pj=by('projects',inv.pid)||{};
+  await put('invoices',{...inv,number,status:'issued',issuedAt:today(),issuer:me(),client:clientOf(pj)});
+  await put('entries',{id:'i-'+inv.id,type:'income',date:today(),concept:`Factura ${number}`,base:t.base,iva:t.iva,total:t.total,cat:'Ventas',status:'posted',pid:inv.pid,ref:{kind:'invoice',id:inv.id}});
+  if(isR){const o=by('invoices',inv.rectifies);if(o)await put('invoices',{...o,status:'rectified'})}
+  toast('Factura '+number+' emitida');
+}
+const paid=i=>(i.payments||[]).reduce((a,p)=>a+(+p.amount||0),0);
+
+/* ---------- vistas ---------- */
+function vProjects(){
+  const ps=state.projects;
+  return `<div class="row"><h1>Proyectos</h1><div class="acts" style="margin:0"><button data-act="me">Mis datos</button><button data-act="logo">Logotipo</button><button class="p" data-act="newProj">+ Nuevo</button></div></div>${me().nif?'':'<div class="banner">Rellena «Mis datos» (nombre, NIF, dirección) para que aparezcan en presupuestos y facturas.</div>'}`+
+  (ps.length?ps.map(p=>{const q=state.quotes.find(x=>x.pid===p.id&&x.status==='accepted');return `<div class="card" data-act="openProj" data-id="${p.id}" style="cursor:pointer"><div class="row"><span class="b">${esc(p.name)}</span>${badge(p.status,PL)}</div><div class="mut">${esc(p.client)}${p.address?' · '+esc(p.address):''}</div>${q?`<div class="mut">Presupuesto aceptado: <b>${eur(tot(q.lines).total)}</b></div>`:''}</div>`}).join(''):'<div class="empty">Aún no hay proyectos. Crea el primero.</div>');
+}
+function vProject(p){
+  const subs=[['presu','Presupuestos'],['mat','Materiales'],['alb','Albaranes'],['fac','Facturas'],['mar','Margen']];
+  const body={presu:vQuotes,mat:vMaterials,alb:vNotes,fac:vInvoices,mar:vMargin}[view.sub](p);
+  return `<div class="row"><button class="s" data-act="back">← Proyectos</button><span><button class="s" data-act="editProj" data-id="${p.id}">Editar</button> <button class="s d" data-act="delProj" data-id="${p.id}">Eliminar</button></span></div>
+  <h1>${esc(p.name)} ${badge(p.status,PL)}</h1><div class="mut">${esc(p.client)}${p.nif?' · '+esc(p.nif):''}</div>
+  <div class="mut">${[p.phone,p.email].filter(Boolean).map(esc).join(' · ')}</div>
+  <div class="mut">${p.address?'Obra: '+esc(p.address):''}${p.start?' · inicio '+fdate(p.start):''}</div>
+  ${p.notes?`<div class="mut">${esc(p.notes)}</div>`:''}
+  <div class="tabs">${subs.map(([k,l])=>`<button class="${view.sub===k?'on':''}" data-act="sub" data-k="${k}">${l}</button>`).join('')}</div>${body}`;
+}
+const lineList=(ls,cost)=>`<details><summary>${(ls||[]).length} línea(s)</summary>${(ls||[]).map(l=>`<div class="ln"><span>${esc(l.desc)} <span class="mut">${num(l.qty)} ${esc(l.unit)} × ${eur(l.price)}${l.disc?` −${l.disc}%`:''}${l.kind?' · '+KL[l.kind]:''}</span></span><b>${eur(cost?l.qty*l.price:lb(l))}</b></div>`).join('')}</details>`;
+function vQuotes(p){
+  const qs=ofp('quotes',p.id).sort((a,b)=>b.version-a.version);
+  return `<div class="row"><h2>Presupuestos</h2><button class="p s" data-act="newQuote">+ Nuevo</button></div>`+(qs.length?qs.map(q=>{
+    const t=tot(q.lines),b=a=>`data-act="${a}" data-id="${q.id}"`,st=q.status;
+    return `<div class="card"><div class="row"><span class="b">Presupuesto v${q.version} · ${fdate(q.date)}</span>${badge(st,QL)}</div>
+    <div class="mut">Base ${eur(t.base)} · IVA ${eur(t.iva)}${q.valid?' · válido hasta '+fdate(q.valid):''}</div><div class="b">Total ${eur(t.total)}</div>${lineList(q.lines)}
+    <div class="acts">
+    ${st==='draft'?`<button class="s" ${b('qLines')}>Editar líneas</button><button class="s" ${b('qMeta')}>Datos</button><button class="s p" ${b('qSent')}>Marcar enviado</button><button class="s d" ${b('qDel')}>Eliminar</button>`:''}
+    ${st==='sent'?`<button class="s p" ${b('qAccept')}>Aceptar</button><button class="s" ${b('qRej')}>Rechazado</button><button class="s" ${b('qExp')}>Caducado</button><button class="s" ${b('qDraft')}>Volver a borrador</button>`:''}
+    ${st==='accepted'?`<button class="s p" ${b('newInv')}>Crear factura</button>`:''}
+    ${['rejected','expired'].includes(st)?`<button class="s" ${b('qDraft')}>Reactivar (borrador)</button>`:''}
+    ${st!=='draft'?`<button class="s" ${b('qVer')}>Nueva versión</button>`:''}<button class="s" ${b('qDoc')}>Ver documento</button></div></div>`}).join(''):'<div class="empty">Sin presupuestos</div>');
+}
+function vMaterials(p){
+  const ms=ofp('materials',p.id);
+  return `<div class="row"><h2>Listado de materiales</h2><button class="s" data-act="newMat">+ Extra</button></div>
+  <div class="mut">Se genera al aceptar un presupuesto. Lo recibido se calcula con los albaranes.</div>`+(ms.length?ms.map(m=>{
+    const r=received(m),st=mstatus(m),pc=Math.min(100,m.planned?r/m.planned*100:0);
+    return `<div class="card"><div class="row"><span class="b">${esc(m.desc)}</span>${badge(st,ML)}</div>
+    <div class="mut">Previsto ${num(m.planned)} ${esc(m.unit)} · recibido ${num(r)}${r>m.planned?' (exceso)':''}${m.qid?'':' · añadido a mano'}</div><div class="bar"><i style="width:${pc}%"></i></div>
+    <div class="acts"><button class="s" data-act="mEdit" data-id="${m.id}">Editar</button>
+    ${m.manual?`<button class="s" data-act="mReopen" data-id="${m.id}">Reabrir</button>`:`<button class="s" data-act="mClose" data-id="${m.id}">Dar por cerrado</button><button class="s d" data-act="mCancel" data-id="${m.id}">Cancelar</button>`}</div></div>`}).join(''):'<div class="empty">Sin materiales. Acepta un presupuesto para generarlos.</div>');
+}
+function vNotes(p){
+  const ns=ofp('notes',p.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  return `<div class="row"><h2>Albaranes de compra</h2><button class="p s" data-act="newNote">+ Nuevo</button></div>`+(ns.length?ns.map(n=>{
+    const t=tot((n.lines||[]).map(l=>({qty:l.qty,price:l.price,disc:0,iva:l.iva}))),b=a=>`data-act="${a}" data-id="${n.id}"`;
+    return `<div class="card"><div class="row"><span class="b">${esc(n.supplier)} · ${esc(n.number||'s/n')}</span>${badge(n.status,NL)}</div>
+    <div class="mut">${fdate(n.date)}${n.file?' · '+esc(n.file):''}</div><div class="b">Total ${eur(t.total)} <span class="mut">(base ${eur(t.base)})</span></div>
+    <details><summary>${(n.lines||[]).length} línea(s)</summary>${(n.lines||[]).map(l=>{const m=by('materials',l.mat);return `<div class="ln"><span>${esc(l.desc)} <span class="mut">${num(l.qty)} ${esc(l.unit)} × ${eur(l.price)}${m?'':' · sin vincular'}</span></span><b>${eur(l.qty*l.price)}</b></div>`}).join('')}</details>
+    <div class="acts">${n.status!=='invoiced'?`<button class="s" ${b('nLines')}>Líneas</button><button class="s" ${b('nMeta')}>Datos</button>`:''}
+    ${n.status==='draft'?`<button class="s p" ${b('nVer')}>Validar</button>`:''}${n.status==='verified'?`<button class="s p" ${b('nInv')}>Marcar facturado</button>`:''}
+    ${n.status!=='draft'?`<button class="s" ${b('nDraft')}>Volver a pendiente</button>`:`<button class="s d" ${b('nDel')}>Eliminar</button>`}<button class="s" ${b('nPdf')}>PDF</button></div></div>`}).join(''):'<div class="empty">Sin albaranes</div>');
+}
+function vInvoices(p){
+  const is=ofp('invoices',p.id).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
+  const hasQ=state.quotes.some(q=>q.pid===p.id&&q.status==='accepted');
+  return `<div class="row"><h2>Facturas</h2><button class="p s" data-act="newInv" ${hasQ?'':'disabled'}>+ Desde presupuesto</button></div>${hasQ?'':'<div class="mut">Necesitas un presupuesto aceptado.</div>'}`+(is.length?is.map(i=>{
+    const t=tot(i.lines),pd=paid(i),b=a=>`data-act="${a}" data-id="${i.id}"`,st=i.status;
+    return `<div class="card"><div class="row"><span class="b">${i.number?esc(i.number):'Borrador'}${i.rectifies?' (rectificativa)':''}</span>${badge(st,IL)}</div>
+    <div class="mut">${i.issuedAt?'Emitida '+fdate(i.issuedAt):'Creada '+fdate(i.created)}</div>
+    <div class="mut">Base ${eur(t.base)} · IVA ${eur(t.iva)}</div><div class="b">Total ${eur(t.total)}</div>
+    ${(st==='issued'||st==='paid')&&t.total>0?`<div class="mut">Cobrado ${eur(pd)} · pendiente ${eur(t.total-pd)}</div>`:''}${lineList(i.lines)}
+    <div class="acts">${st==='draft'?`<button class="s" ${b('iLines')}>Editar líneas</button><button class="s p" ${b('iIssue')}>Emitir</button><button class="s d" ${b('iDel')}>Eliminar</button>`:''}
+    ${st==='issued'&&t.total>0?`<button class="s p" ${b('iPay')}>Registrar cobro</button>`:''}
+    ${['issued','paid'].includes(st)&&!i.rectifies?`<button class="s d" ${b('iRect')}>Rectificar</button>`:''}<button class="s" ${b('iDoc')}>Ver documento</button></div></div>`}).join(''):'<div class="empty">Sin facturas</div>');
+}
+function vMargin(p){
+  const q=state.quotes.find(x=>x.pid===p.id&&x.status==='accepted');
+  const sale=q?tot(q.lines).base:0,est=q?q.lines.reduce((a,l)=>a+(+l.qty||0)*(+l.cost||0),0):0;
+  const real=ofp('notes',p.id).reduce((a,n)=>a+tot((n.lines||[]).map(l=>({qty:l.qty,price:l.price,disc:0,iva:0}))).base,0);
+  const inv=ofp('invoices',p.id).filter(i=>['issued','paid','rectified'].includes(i.status)||(i.rectifies&&i.status==='issued')).reduce((a,i)=>a+tot(i.lines).base,0);
+  const ref=inv||sale;
+  const k=(l,v,c='')=>`<div class="kpi"><span class="mut">${l}</span><b class="${c}">${v}</b></div>`;
+  const ms=ofp('materials',p.id);
+  const rows=ms.map(m=>{
+    const real=state.notes.filter(n=>n.pid===p.id).reduce((a,n)=>a+(n.lines||[]).filter(l=>l.mat===m.id).reduce((x,l)=>x+l.qty*l.price,0),0);
+    const e=q?q.lines.filter(l=>(m.lineIds||[]).includes(l.id)).reduce((a,l)=>a+l.qty*l.cost,0):0;
+    return `<div class="ln"><span>${esc(m.desc)}</span><span>${e?eur(e)+' → ':''}<b class="${e&&real>e?'neg':''}">${eur(real)}</b></span></div>`}).join('');
+  return `<h2>Control de margen</h2>${q?'':'<div class="mut">Sin presupuesto aceptado: los importes de venta serán 0.</div>'}
+  <div class="grid">${k('Venta presupuestada (base)',eur(sale))}${k('Coste estimado',eur(est))}${k('Margen estimado',eur(sale-est),sale-est<0?'neg':'pos')}${k('Coste real materiales',eur(real))}
+  ${k('Facturado (base)',eur(inv))}${k('Margen real'+(inv?'':' (s/ presupuesto)'),eur(ref-real),ref-real<0?'neg':'pos')}</div>
+  <div class="mut" style="margin-top:8px">Cálculo sobre presupuesto y albaranes; la contabilidad no se duplica. Solo se compara material con albaranes, la mano de obra no se contabiliza como coste real.</div>
+  ${ms.length?`<h2>Materiales: estimado → real</h2><div class="card">${rows}</div>`:''}`;
+}
+function vCatalog(){
+  return `<div class="row"><h1>Catálogo</h1><div class="acts" style="margin:0"><button data-act="scanCat">Escanear</button><button data-act="labels">Etiquetas PDF</button><button class="p" data-act="newCat">+ Nuevo</button></div></div><input id="catq" type="search" placeholder="Buscar por nombre, código o proveedor" value="${esc(view.q||'')}" style="margin-bottom:10px"><div id="catlist">${catList()}</div>`;
+}
+const catItems=()=>{const q=(view.q||'').toLowerCase().trim();return state.catalog.filter(c=>!q||[c.name,c.code,c.source,KL[c.kind]].some(v=>String(v||'').toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name))};
+function catList(){
+  const its=catItems();
+  return (its.length?its.map(c=>`<div class="card"><div class="row"><span class="b">${esc(c.name)}</span><span class="b">${eur(c.price)}/${esc(c.unit)}</span></div><div class="mut">${KL[c.kind]||''} · IVA ${c.iva}%${c.source?' · '+esc(c.source):''}${c.updated?' · act. '+fdate(c.updated):''}${c.code?' · cód. '+esc(c.code):''}</div><div class="acts">${c.code?`<button class="s" data-act="showCode" data-id="${c.id}">Ver código</button>`:''}<button class="s" data-act="editCat" data-id="${c.id}">Editar</button><button class="s d" data-act="delCat" data-id="${c.id}">Borrar</button></div></div>`).join(''):`<div class="empty">${state.catalog.length?'Sin resultados para la búsqueda.':'Catálogo vacío. Añade materiales, mano de obra o partidas reutilizables.'}</div>`);
+}
+function vAcc(){
+  const es=state.entries.filter(e=>view.ef==='all'||e.type===view.ef).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const sum=t=>state.entries.filter(e=>e.type===t);
+  const s=(t,f)=>sum(t).reduce((a,e)=>a+(+e[f]||0),0);
+  const k=(l,v,c='')=>`<div class="kpi"><span class="mut">${l}</span><b class="${c}">${v}</b></div>`;
+  const res=s('income','base')-s('expense','base');
+  return `<div class="row"><h1>Contabilidad</h1><div class="acts" style="margin:0"><button class="s" data-act="csv">CSV</button><button class="p s" data-act="newEntry">+ Apunte</button></div></div>
+  <div class="grid">${k('Ingresos (base)',eur(s('income','base')))}${k('Gastos (base)',eur(s('expense','base')))}${k('Resultado',eur(res),res<0?'neg':'pos')}${k('IVA repercutido − soportado',eur(s('income','iva')-s('expense','iva')))}</div>
+  <div class="tabs">${[['all','Todos'],['income','Ingresos'],['expense','Gastos']].map(([k,l])=>`<button class="${view.ef===k?'on':''}" data-act="ef" data-k="${k}">${l}</button>`).join('')}</div>`+
+  (es.length?es.map(e=>{const p=by('projects',e.pid);return `<div class="card"><div class="row"><span class="b">${esc(e.concept)}</span><span class="b ${e.type==='income'?'pos':'neg'}">${e.type==='income'?'+':'−'}${eur(e.total)}</span></div>
+  <div class="mut">${fdate(e.date)} · ${esc(e.cat||'')}${p?' · '+esc(p.name):''} · base ${eur(e.base)} IVA ${eur(e.iva)}</div>
+  <div class="row" style="margin-top:6px">${badge(e.status,EL)}<span>${e.status!=='provisional'?`<button class="s" data-act="eRec" data-id="${e.id}">${e.status==='reconciled'?'Quitar conciliación':'Conciliar'}</button>`:''}${!e.ref?` <button class="s d" data-act="eDel" data-id="${e.id}">Borrar</button>`:''}</span></div></div>`}).join(''):'<div class="empty">Sin apuntes. Se crean solos al validar albaranes y emitir facturas.</div>');
+}
+
+function render(){
+  const a=document.getElementById('app');let h='';
+  if(!db)h+='<div class="banner">Sin base de datos: los cambios no se guardarán al cerrar.</div>';
+  if(loadErr)h+=`<div class="banner">${esc(loadErr)}</div>`;
+  if(db&&loaded<COLS.length&&!loadErr)h+='<div class="mut">Cargando…</div>';
+  if(view.tab==='proj'){const p=view.pid&&by('projects',view.pid);h+=p?vProject(p):vProjects()}
+  else h+=view.tab==='cat'?vCatalog():vAcc();
+  a.innerHTML=h;
+  document.getElementById('nav').innerHTML=[['proj','Proyectos'],['cat','Catálogo'],['acc','Contabilidad']].map(([k,l])=>`<button class="${view.tab===k?'on':''}" data-act="tab" data-k="${k}">${l}</button>`).join('');
+}
+let rq=0;const sched=()=>{cancelAnimationFrame(rq);rq=requestAnimationFrame(render)};
+
+/* ---------- acciones ---------- */
+const projFields=[{n:'name',l:'Nombre del proyecto',r:1},{n:'client',l:'Cliente (nombre o razón social)'},{n:'nif',l:'DNI / NIF del cliente'},{n:'email',l:'Email del cliente',t:'email'},{n:'phone',l:'Teléfono del cliente',t:'tel'},{n:'caddr',l:'Dirección fiscal del cliente'},{n:'address',l:'Dirección / ubicación de la obra'},{n:'status',l:'Estado',t:'select',o:Object.entries(PL)},{n:'start',l:'Fecha de inicio',t:'date'},{n:'notes',l:'Notas',t:'textarea'}];
+const cp=()=>by('projects',view.pid);
+const A={
+  tab:d=>{view.tab=d.k;view.pid=null;render()},
+  back:()=>{view.pid=null;render()},
+  openProj:d=>{view.pid=d.id;view.sub='presu';render();scrollTo(0,0)},
+  sub:d=>{view.sub=d.k;render()},
+  ef:d=>{view.ef=d.k;render()},
+  newProj:()=>formModal({title:'Nuevo proyecto',fields:projFields,values:{status:'prep',start:today()},onSubmit:async v=>{const o=await put('projects',v);view.pid=o.id;view.sub='presu';render()}}),
+  editProj:d=>{const p=by('projects',d.id);formModal({title:'Editar proyecto',fields:projFields,values:p,onSubmit:v=>put('projects',{...p,...v})})}
+};
+Object.assign(A,{
+  newCat:()=>catForm(),editCat:d=>catForm(by('catalog',d.id)),
+  scanCat:async()=>{const code=await scanCode();if(!code)return;const c=state.catalog.find(x=>x.code===code);if(c)catForm(c);else{toast('Código nuevo: crea el elemento');catForm(null,code)}},
+  showCode:d=>{const c=by('catalog',d.id);openModal(`<h2>${esc(c.name)}</h2><div style="text-align:center;background:#fff;border-radius:10px;padding:8px"><svg id="bc" style="max-width:100%"></svg></div><label>Etiquetas a imprimir (copias)</label><input id="n" type="number" min="1" max="120" value="1"><div class="acts"><button class="p" id="pdf">Descargar PDF para imprimir</button><button id="x">Cerrar</button></div>`,(s,close)=>{s.querySelector('#x').onclick=close;s.querySelector('#pdf').onclick=()=>{const n=Math.min(120,Math.max(1,parseInt(s.querySelector('#n').value)||1));downloadLabels(Array(n).fill(c),'etiqueta-'+c.code+'.pdf')};drawBarcode(s.querySelector('#bc'),c.code).catch(()=>toast('No se pudo generar el código'))})},
+  me:()=>{const m=me();formModal({title:'Mis datos (emisor)',fields:[{n:'name',l:'Nombre o razón social',r:1},{n:'nif',l:'DNI / NIF'},{n:'address',l:'Dirección fiscal'},{n:'email',l:'Email',t:'email'},{n:'phone',l:'Teléfono',t:'tel'},{n:'pay',l:'Datos de cobro (IBAN, condiciones…)',t:'textarea'}],values:m,onSubmit:v=>put('settings',{...m,...v,id:'me'})})},
+  qDoc:d=>docView('quote',by('quotes',d.id)),iDoc:d=>docView('invoice',by('invoices',d.id)),
+  logo:()=>{let data=me().logo||'';
+    openModal(`<h2>Logotipo</h2><p class="mut">Aparecerá en «Ver documento» de presupuestos y facturas. Se reduce de tamaño automáticamente. En las facturas ya emitidas no cambia.</p><div id="pv" style="background:#fff;border-radius:10px;padding:10px;min-height:60px;text-align:center"></div><label>Elegir imagen</label><input type="file" accept="image/*" id="f"><div class="acts"><button class="p" id="ok">Guardar</button><button id="rm" class="d">Quitar logotipo</button><button id="no">Cancelar</button></div>`,(sh,close)=>{
+      const pv=sh.querySelector('#pv'),show=()=>pv.innerHTML=data?`<img src="${data}" style="max-height:90px;max-width:100%">`:'<span class="mut">Sin logotipo</span>';show();
+      sh.querySelector('#f').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+        try{const b=await createImageBitmap(f),k=Math.min(1,360/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*k);c.height=Math.round(b.height*k);c.getContext('2d').drawImage(b,0,0,c.width,c.height);
+          data=c.toDataURL('image/png');if(data.length>180000)data=c.toDataURL('image/jpeg',0.85);show()}catch(x){toast('No se pudo leer la imagen')}};
+      sh.querySelector('#rm').onclick=()=>{data='';show()};sh.querySelector('#no').onclick=close;
+      sh.querySelector('#ok').onclick=async()=>{close();await put('settings',{...me(),id:'me',logo:data})};
+    })},
+  delProj:async d=>{const p=by('projects',d.id);
+    const n={q:ofp('quotes',p.id).length,m:ofp('materials',p.id).length,a:ofp('notes',p.id).length,f:ofp('invoices',p.id).length,e:ofp('entries',p.id).length};
+    const emit=ofp('invoices',p.id).filter(i=>i.number).length;
+    const msg=`Se eliminará «${p.name}» con TODO lo suyo: ${n.q} presupuesto(s), ${n.m} material(es), ${n.a} albarán(es), ${n.f} factura(s) y ${n.e} apunte(s) contable(s).`+(emit?` Atención: hay ${emit} factura(s) emitida(s); borrarlas rompe la numeración correlativa y la contabilidad.`:'')+' No se puede deshacer.';
+    if(!await confirmBox(msg,'Eliminar todo'))return;
+    for(const [c,k] of [['quotes','quotes'],['materials','materials'],['notes','notes'],['invoices','invoices'],['entries','entries']])for(const x of ofp(k,p.id))await del(c,x.id);
+    await del('projects',p.id);view.pid=null;render();toast('Proyecto eliminado')},
+  nPdf:d=>downloadPdf('note',by('notes',d.id)),
+  labels:()=>{const its=catItems().filter(c=>c.code);const f=(view.q||'').trim();downloadLabels(its,'etiquetas-catalogo.pdf');if(f)toast(`Etiquetas de ${its.length} elemento(s) filtrados`)},
+  delCat:async d=>{if(await confirmBox('¿Borrar del catálogo? Las líneas ya creadas no cambian.','Borrar'))del('catalog',d.id)},
+  newQuote:async()=>{const p=cp(),v=Math.max(0,...ofp('quotes',p.id).map(q=>q.version))+1;const q=await put('quotes',{pid:p.id,version:v,date:today(),status:'draft',lines:[],valid:'',notes:''});A.qLines({id:q.id},q)},
+  qLines:(d,qq)=>{const q=qq||by('quotes',d.id);linesModal({title:`Presupuesto v${q.version}`,lines:q.lines,mode:'quote',pid:q.pid,onSave:L=>put('quotes',{...q,lines:L})})},
+  qMeta:d=>{const q=by('quotes',d.id);formModal({title:'Datos del presupuesto',fields:[{n:'date',l:'Fecha',t:'date'},{n:'valid',l:'Válido hasta',t:'date'},{n:'notes',l:'Notas',t:'textarea'}],values:q,onSubmit:v=>put('quotes',{...q,...v})})},
+  qSent:d=>{const q=by('quotes',d.id);if(!q.lines.length)return toast('Añade líneas primero');put('quotes',{...q,status:'sent'})},
+  qAccept:async d=>{if(await confirmBox('Al aceptar se generará el listado de materiales a partir de las líneas de material.','Aceptar'))acceptQuote(by('quotes',d.id))},
+  qRej:d=>put('quotes',{...by('quotes',d.id),status:'rejected'}),qExp:d=>put('quotes',{...by('quotes',d.id),status:'expired'}),
+  qDraft:async d=>{if(await confirmBox('Volver a borrador para editarlo. Para conservar el histórico, mejor crea una nueva versión.','Volver a borrador'))put('quotes',{...by('quotes',d.id),status:'draft'})},
+  qDel:async d=>{if(await confirmBox('¿Eliminar este borrador?','Eliminar'))del('quotes',d.id)},
+  qVer:async d=>{const q=by('quotes',d.id),v=Math.max(...ofp('quotes',q.pid).map(x=>x.version))+1;
+    await put('quotes',{...q,id:uid(),version:v,date:today(),status:'draft',acceptedAt:'',lines:q.lines.map(l=>({...l,id:uid()}))});toast('Creada v'+v+' en borrador')},
+  newMat:()=>formModal({title:'Material extra',fields:[{n:'desc',l:'Descripción',r:1},{n:'unit',l:'Unidad',t:'select',o:UNITS.map(u=>[u,u])},{n:'planned',l:'Cantidad prevista',t:'number'}],values:{unit:'ud',planned:1},onSubmit:v=>put('materials',{...v,pid:view.pid,qid:'',manual:'',lineIds:[]})}),
+  mEdit:d=>{const m=by('materials',d.id);formModal({title:'Editar material',fields:[{n:'desc',l:'Descripción',r:1},{n:'unit',l:'Unidad',t:'select',o:UNITS.map(u=>[u,u])},{n:'planned',l:'Cantidad prevista',t:'number'}],values:m,onSubmit:v=>put('materials',{...m,...v})})},
+  mClose:d=>put('materials',{...by('materials',d.id),manual:'closed'}),
+  mCancel:async d=>{if(await confirmBox('Cancelar por cambio de alcance.','Cancelar material'))put('materials',{...by('materials',d.id),manual:'cancelled'})},
+  mReopen:d=>put('materials',{...by('materials',d.id),manual:''}),
+  newNote:()=>noteForm(null),nMeta:d=>noteForm(by('notes',d.id)),
+  nLines:d=>{const n=by('notes',d.id);linesModal({title:'Líneas del albarán',lines:n.lines,mode:'note',pid:n.pid,onSave:async L=>{const o={...n,lines:L};await put('notes',o);await syncNoteEntry(o)}})},
+  nVer:async d=>{const n=by('notes',d.id);if(!n.lines.length)return toast('Añade líneas primero');const o={...n,status:'verified'};await put('notes',o);await syncNoteEntry(o)},
+  nInv:async d=>{const o={...by('notes',d.id),status:'invoiced'};await put('notes',o);await syncNoteEntry(o)},
+  nDraft:async d=>{const o={...by('notes',d.id),status:'draft'};await put('notes',o);await syncNoteEntry(o)},
+  nDel:async d=>{if(await confirmBox('¿Eliminar este albarán y su apunte provisional?','Eliminar')){await del('notes',d.id);await del('entries','n-'+d.id)}},
+  newInv:async d=>{const p=cp(),q=d.id?by('quotes',d.id):state.quotes.find(x=>x.pid===p.id&&x.status==='accepted');if(!q)return;
+    const i=await put('invoices',{pid:p.id,qid:q.id,status:'draft',created:today(),number:'',payments:[],lines:q.lines.map(l=>({id:uid(),desc:l.desc,qty:l.qty,unit:l.unit,price:l.price,disc:l.disc,iva:l.iva,cat:l.cat||''}))});
+    view.tab='proj';view.sub='fac';render();A.iLines({id:i.id},i)},
+  iLines:(d,ii)=>{const i=ii||by('invoices',d.id);linesModal({title:'Líneas de la factura',lines:i.lines,mode:'invoice',pid:i.pid,onSave:L=>put('invoices',{...i,lines:L})})},
+  iIssue:async d=>{if(await confirmBox('Al emitir se fija la numeración, se bloquean los datos (incluidos los tuyos y los del cliente) y se crea el ingreso.'+(me().nif?'':' Aviso: aún no has rellenado «Mis datos».')+' ¿Emitir?','Emitir'))issueInvoice(by('invoices',d.id))},
+  iDel:async d=>{if(await confirmBox('¿Eliminar este borrador?','Eliminar'))del('invoices',d.id)},
+  iPay:d=>{const i=by('invoices',d.id),pend=tot(i.lines).total-paid(i);formModal({title:'Registrar cobro',fields:[{n:'amount',l:'Importe',t:'number'},{n:'date',l:'Fecha',t:'date'}],values:{amount:Math.round(pend*100)/100,date:today()},onSubmit:async v=>{
+    const pay=[...(i.payments||[]),{date:v.date,amount:v.amount}],t=tot(i.lines).total;await put('invoices',{...i,payments:pay,status:pay.reduce((a,x)=>a+x.amount,0)>=t-0.005?'paid':'issued'})}})},
+  iRect:async d=>{const i=by('invoices',d.id);if(await confirmBox(`Se creará un borrador de factura rectificativa con importes negativos de ${i.number}. Al emitirla, la original pasará a "Rectificada".`,'Crear rectificativa')){
+    await put('invoices',{pid:i.pid,qid:i.qid,status:'draft',created:today(),number:'',payments:[],rectifies:i.id,lines:i.lines.map(l=>({...l,id:uid(),qty:-(+l.qty||0)}))});toast('Rectificativa creada en borrador')}},
+  newEntry:()=>formModal({title:'Apunte manual',fields:[{n:'type',l:'Tipo',t:'select',o:[['expense','Gasto'],['income','Ingreso']]},{n:'date',l:'Fecha',t:'date'},{n:'concept',l:'Concepto',r:1},{n:'cat',l:'Categoría'},{n:'base',l:'Base imponible',t:'number'},{n:'ivap',l:'IVA %',t:'number'},{n:'pid',l:'Proyecto (opcional)',t:'select',o:[['','—'],...state.projects.map(p=>[p.id,p.name])]}],values:{type:'expense',date:today(),ivap:21},onSubmit:v=>{const iva=v.base*v.ivap/100;return put('entries',{type:v.type,date:v.date,concept:v.concept,cat:v.cat,base:v.base,iva,total:v.base+iva,status:'posted',pid:v.pid,ref:null})}}),
+  eRec:d=>{const e=by('entries',d.id);put('entries',{...e,status:e.status==='reconciled'?'posted':'reconciled'})},
+  eDel:async d=>{if(await confirmBox('¿Borrar apunte?','Borrar'))del('entries',d.id)},
+  csv:async()=>{if(!dl)return toast('La descarga no está disponible aquí');
+    const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const rows=[['Fecha','Tipo','Concepto','Categoría','Proyecto','Base','IVA','Total','Estado'],...state.entries.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(e=>[e.date,e.type==='income'?'Ingreso':'Gasto',e.concept,e.cat,(by('projects',e.pid)||{}).name||'',e.base,e.iva,e.total,EL[e.status]])];
+    try{await dl.save({filename:'contabilidad.csv',data:'﻿'+rows.map(r=>r.map(q).join(';')).join('\n')})}catch(e){if(e.code!=='declined')toast('No se pudo descargar')}}
+});
+function docView(kind,o){
+  const p=by('projects',o.pid)||{},iss=o.issuer||me(),cl=o.client||clientOf(p),t=tot(o.lines);
+  const title=kind==='quote'?`Presupuesto v${o.version}`:`${o.rectifies?'Factura rectificativa':'Factura'} ${o.number||'(borrador)'}`;
+  const date=kind==='quote'?o.date:(o.issuedAt||o.created);
+  const party=(h,x)=>`${h}\n${[x.name,x.nif&&'NIF: '+x.nif,x.address,x.phone&&'Tel: '+x.phone,x.email].filter(Boolean).join('\n')}`;
+  const ls=(o.lines||[]).map(l=>`${l.desc} — ${num(l.qty)} ${l.unit} × ${eur(l.price)}${l.disc?` (−${l.disc}%)`:''} + IVA ${l.iva}% = ${eur(lb(l)*(1+(+l.iva||0)/100))}`).join('\n');
+  const txt=`${title}\nFecha: ${fdate(date)}${p.address?'\nObra: '+p.address:''}\n\n${party('EMISOR',iss)}\n\n${party('CLIENTE',cl)}\n\n${ls}\n\nBase imponible: ${eur(t.base)}\nIVA: ${eur(t.iva)}\nTOTAL: ${eur(t.total)}${iss.pay?'\n\n'+iss.pay:''}`;
+  const body=`Hola${cl.name?' '+cl.name:''},\n\nTe envío ${kind==='quote'?'el presupuesto':'la factura'} ${o.number||('v'+(o.version||''))}${p.address?' de la obra en '+p.address:''}.\n\n${ls}\n\nBase imponible: ${eur(t.base)}\nIVA: ${eur(t.iva)}\nTOTAL: ${eur(t.total)}${iss.pay?'\n\n'+iss.pay:''}\n\nUn saludo,\n${iss.name||''}`;
+  const mail='mailto:'+encodeURIComponent(cl.email||'')+'?subject='+encodeURIComponent(title+(iss.name?' · '+iss.name:''))+'&body='+encodeURIComponent(body);
+  openModal(`<h2>${esc(title)}</h2>${iss.logo?`<img src="${iss.logo}" alt="Logotipo" style="max-height:70px;max-width:60%;display:block;margin-bottom:8px">`:''}<div class="card" style="white-space:pre-wrap;font-size:13px">${esc(txt)}</div><div class="acts"><button class="p" id="pdf">Descargar PDF</button><button id="cp">Copiar texto</button>${cl.email?`<a class="btn" href="${esc(mail)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir en correo</a>`:''}<button id="x">Cerrar</button></div>${cl.email?`<div class="mut">Destinatario: ${esc(cl.email)}. «Abrir en correo» prepara el mensaje en tu app de correo; tú lo envías.</div>`:'<div class="mut">Añade el email del cliente en el proyecto para preparar el correo.</div>'}`,(s,close)=>{
+    s.querySelector('#x').onclick=close;
+    s.querySelector('#pdf').onclick=()=>downloadPdf(kind,o);
+    s.querySelector('#cp').onclick=async()=>{try{await navigator.clipboard.writeText(txt);toast('Copiado')}catch(e){toast('No se pudo copiar; selecciona el texto')}};
+  });
+}
+/* ---------- PDF ---------- */
+const pm=t=>String(t).replace(/[  ]/g,' ');
+async function buildPdf(kind,o){
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js');
+  const d=new window.jspdf.jsPDF({unit:'mm',format:'a4'}),W=210,M=15,p=by('projects',o.pid)||{},note=kind==='note';
+  const iss=note?{}:(o.issuer||me()),cl=note?{}:(o.client||clientOf(p));
+  const title=kind==='quote'?`Presupuesto v${o.version}`:note?`Albarán ${o.number||'s/n'}`:`${o.rectifies?'Factura rectificativa':'Factura'} ${o.number||'(borrador)'}`;
+  const date=kind==='quote'?o.date:note?o.date:(o.issuedAt||o.created);
+  const lines=o.lines||[],t=tot(note?lines.map(l=>({qty:l.qty,price:l.price,disc:0,iva:l.iva})):lines);
+  let y=15;
+  if(iss.logo){try{const im=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ko;i.src=iss.logo});
+    const h=18,w=Math.min(55,h*im.width/im.height);d.addImage(iss.logo,iss.logo.startsWith('data:image/jpeg')?'JPEG':'PNG',M,y,w,h)}catch(e){}}
+  d.setFont('helvetica','bold');d.setFontSize(18);d.text(title,W-M,y+6,{align:'right'});
+  d.setFont('helvetica','normal');d.setFontSize(10);d.text('Fecha: '+fdate(date),W-M,y+12,{align:'right'});
+  if(p.address)d.text(d.splitTextToSize('Obra: '+p.address,90),W-M,y+17,{align:'right'});
+  y+=28;
+  const block=(x,head,arr)=>{d.setFont('helvetica','bold');d.setFontSize(10);d.text(head,x,y);d.setFont('helvetica','normal');d.setFontSize(9.5);
+    const ls=arr.filter(Boolean).flatMap(v=>d.splitTextToSize(String(v),85));ls.forEach((v,i)=>d.text(v,x,y+5+i*4.5));return ls.length};
+  let n1,n2;
+  if(note){n1=block(M,'PROVEEDOR',[o.supplier,o.number&&'Nº albarán: '+o.number,o.file]);n2=block(W/2+5,'PROYECTO',[p.name,p.client])}
+  else{n1=block(M,'EMISOR',[iss.name,iss.nif&&'NIF: '+iss.nif,iss.address,iss.phone&&'Tel: '+iss.phone,iss.email]);n2=block(W/2+5,'CLIENTE',[cl.name,cl.nif&&'NIF: '+cl.nif,cl.address,cl.phone&&'Tel: '+cl.phone,cl.email])}
+  y+=8+Math.max(n1,n2)*4.5;
+  const head=note?['Descripción','Cantidad','Coste unit.','IVA','Importe']:['Descripción','Cantidad','Precio unit.','Dto.','IVA','Importe'];
+  const body=lines.map(l=>note?[l.desc,num(l.qty)+' '+l.unit,pm(eur(l.price)),l.iva+'%',pm(eur(l.qty*l.price))]:[l.desc,num(l.qty)+' '+l.unit,pm(eur(l.price)),l.disc?l.disc+'%':'',l.iva+'%',pm(eur(lb(l)))]);
+  d.autoTable({startY:y,head:[head],body,margin:{left:M,right:M},styles:{fontSize:9,cellPadding:2},headStyles:{fillColor:[31,111,92]},
+    columnStyles:Object.fromEntries(head.map((_,i)=>[i,i>0?{halign:'right'}:{}]))});
+  y=d.lastAutoTable.finalY+8;if(y>245){d.addPage();y=20}
+  d.setFontSize(10);[['Base imponible',t.base],['IVA',t.iva]].forEach(([k,v])=>{d.setFont('helvetica','normal');d.text(k,W-M-45,y);d.text(pm(eur(v)),W-M,y,{align:'right'});y+=6});
+  d.setFont('helvetica','bold');d.setFontSize(12);d.text('TOTAL',W-M-45,y+1);d.text(pm(eur(t.total)),W-M,y+1,{align:'right'});y+=12;
+  const extra=note?'':[iss.pay,o.notes].filter(Boolean).join('\n\n');
+  if(extra){d.setFont('helvetica','normal');d.setFontSize(9);const ls=d.splitTextToSize(extra,W-2*M);if(y+ls.length*4.2>285){d.addPage();y=20}d.text(ls,M,y)}
+  return d;
+}
+async function downloadPdf(kind,o){
+  if(!dl)return toast('La descarga no está disponible aquí');
+  toast('Generando PDF…');
+  try{const d=await buildPdf(kind,o);
+    const name=(kind==='quote'?`Presupuesto-v${o.version}`:kind==='note'?`Albaran-${o.number||'sn'}`:`Factura-${o.number||'borrador'}`).replace(/[^\w\-.]+/g,'-')+'.pdf';
+    await dl.save({filename:name,data:d.output('blob')})}
+  catch(e){if(e&&e.code!=='declined')toast('No se pudo generar el PDF')}
+}
+async function labelsPdf(items){
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js');
+  await loadJs('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  const d=new window.jspdf.jsPDF({unit:'mm',format:'a4'}),cols=3,rows=8,w=70,h=37,per=cols*rows;
+  items.forEach((c,n)=>{
+    if(n&&n%per===0)d.addPage();const k=n%per,x=(k%cols)*w,y=Math.floor(k/cols)*h+0.5;
+    d.setDrawColor(210);d.rect(x+2,y+2,w-4,h-4);
+    d.setFont('helvetica','bold');d.setFontSize(8);d.text(d.splitTextToSize(c.name,w-10)[0],x+5,y+7);
+    const cv=document.createElement('canvas');
+    try{JsBarcode(cv,c.code,{format:/^\d{13}$/.test(c.code)?'EAN13':'CODE128',displayValue:true,height:60,margin:4,fontSize:18})}catch(e){JsBarcode(cv,c.code,{format:'CODE128',displayValue:true,height:60,margin:4,fontSize:18})}
+    const bw=w-10,bh=h-16;let iw=bw,ih=iw*cv.height/cv.width;if(ih>bh){ih=bh;iw=ih*cv.width/cv.height}
+    d.addImage(cv.toDataURL('image/png'),'PNG',x+(w-iw)/2,y+9,iw,ih);
+  });
+  return d;
+}
+async function downloadLabels(items,name){
+  if(!dl)return toast('La descarga no está disponible aquí');
+  if(!items.length)return toast('No hay elementos con código');
+  toast('Generando PDF…');
+  try{const d=await labelsPdf(items);await dl.save({filename:name,data:d.output('blob')})}catch(e){if(e&&e.code!=='declined')toast('No se pudo generar el PDF')}
+}
+function catForm(c,pre){
+  formModal({title:c?'Editar elemento':'Nuevo elemento',fields:[{n:'name',l:'Nombre',r:1},{n:'kind',l:'Tipo',t:'select',o:Object.entries(KL)},{n:'unit',l:'Unidad',t:'select',o:UNITS.map(u=>[u,u])},{n:'price',l:'Precio base',t:'number'},{n:'iva',l:'IVA %',t:'number'},{n:'source',l:'Fuente / proveedor'},{n:'code',l:'Código de barras (vacío = se genera uno interno)'}],
+    values:c||{kind:'material',unit:'ud',iva:21,code:pre||''},onSubmit:v=>{if(!v.code)v.code=newCode();return put('catalog',{...(c||{}),...v,updated:today()})}});
+}
+function noteForm(n){
+  formModal({title:n?'Datos del albarán':'Nuevo albarán',fields:[{n:'supplier',l:'Proveedor',r:1},{n:'number',l:'Nº de albarán'},{n:'date',l:'Fecha',t:'date'},{n:'file',l:'Archivo / foto (referencia o enlace)'}],values:n||{date:today()},
+    onSubmit:async v=>{const o=await put('notes',{...(n||{pid:view.pid,status:'draft',lines:[]}),...v});if(!n)A.nLines({id:o.id},o);else await syncNoteEntry(o)}});
+}
+Object.assign(A,{nLines:((f)=>(d,nn)=>{const n=nn||by('notes',d.id);linesModal({title:'Líneas del albarán',lines:n.lines,mode:'note',pid:n.pid,onSave:async L=>{const o={...n,lines:L};await put('notes',o);await syncNoteEntry(o)}})})()});
+
+document.addEventListener('input',e=>{if(e.target.id==='catq'){view.q=e.target.value;const l=document.getElementById('catlist');if(l)l.innerHTML=catList()}});
+document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el||el.disabled)return;const f=A[el.dataset.act];if(f)f(el.dataset)});
+
+/* ---------- arranque ---------- */
+(async()=>{
+  render();
+  try{db=await claude.use('db');dl=await claude.use('downloads')}catch(e){db=null}
+  try{dic=await claude.use('dictation');if(dic)initDictation()}catch(e){dic=null}
+  if(!db){render();return}
+  const t=setTimeout(()=>{if(loaded<COLS.length){loadErr='No se pueden alcanzar los datos todavía; lo que ves puede estar desactualizado.';render()}},10000);
+  COLS.forEach(c=>db.collection(c).onSnapshot(s=>{
+    state[c]=s.docs.map(d=>({...d.data(),id:d.id}));
+    if(!s.metadata.fromCache&&!state['_'+c]){state['_'+c]=1;loaded++;if(loaded>=COLS.length){clearTimeout(t);loadErr=''}}
+    sched()},e=>{loadErr='Error al leer datos ('+(e.code||'')+')';sched()}));
+})();
+</script>
+</body>
+</html>
