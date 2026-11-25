@@ -379,7 +379,7 @@ Object.assign(A,{
   newCat:()=>catForm(),editCat:d=>catForm(by('catalog',d.id)),
   scanCat:async()=>{const code=await scanCode();if(!code)return;const c=state.catalog.find(x=>x.code===code);if(c)catForm(c);else{toast('Código nuevo: crea el elemento');catForm(null,code)}},
   showCode:d=>{const c=by('catalog',d.id);openModal(`<h2>${esc(c.name)}</h2><div style="text-align:center;background:#fff;border-radius:10px;padding:8px"><svg id="bc" style="max-width:100%"></svg></div><label>Etiquetas a imprimir (copias)</label><input id="n" type="number" min="1" max="120" value="1"><div class="acts"><button class="p" id="pdf">Descargar PDF para imprimir</button><button id="x">Cerrar</button></div>`,(s,close)=>{s.querySelector('#x').onclick=close;s.querySelector('#pdf').onclick=()=>{const n=Math.min(120,Math.max(1,parseInt(s.querySelector('#n').value)||1));downloadLabels(Array(n).fill(c),'etiqueta-'+c.code+'.pdf')};drawBarcode(s.querySelector('#bc'),c.code).catch(()=>toast('No se pudo generar el código'))})},
-  me:()=>{const m=me();formModal({title:'Mis datos (emisor)',fields:[{n:'name',l:'Nombre o razón social',r:1},{n:'nif',l:'DNI / NIF'},{n:'address',l:'Dirección fiscal'},{n:'email',l:'Email',t:'email'},{n:'phone',l:'Teléfono',t:'tel'},{n:'pay',l:'Datos de cobro (IBAN, condiciones…)',t:'textarea'}],values:m,onSubmit:v=>put('settings',{...m,...v,id:'me'})})},
+  me:()=>{const m=me();formModal({title:'Mis datos (emisor)',fields:[{n:'name',l:'Nombre o razón social',r:1},{n:'nif',l:'DNI / NIF'},{n:'address',l:'Dirección fiscal'},{n:'email',l:'Email',t:'email'},{n:'phone',l:'Teléfono',t:'tel'},{n:'pay',l:'Forma de pago (IBAN, condiciones…)',t:'textarea'}],values:m,onSubmit:v=>put('settings',{...m,...v,id:'me'})})},
   qDoc:d=>docView('quote',by('quotes',d.id)),iDoc:d=>docView('invoice',by('invoices',d.id)),
   logo:()=>{let data=me().logo||'';
     openModal(`<h2>Logotipo</h2><p class="mut">Aparecerá en «Ver documento» de presupuestos y facturas. Se reduce de tamaño automáticamente. En las facturas ya emitidas no cambia.</p><div id="pv" style="background:#fff;border-radius:10px;padding:10px;min-height:60px;text-align:center"></div><label>Elegir imagen</label><input type="file" accept="image/*" id="f"><div class="acts"><button class="p" id="ok">Guardar</button><button id="rm" class="d">Quitar logotipo</button><button id="no">Cancelar</button></div>`,(sh,close)=>{
@@ -463,12 +463,23 @@ function docView(kind,o){
   const date=kind==='quote'?o.date:(o.issuedAt||o.created);
   const party=(h,x)=>`${h}\n${[x.name,x.nif&&'NIF: '+x.nif,x.address,x.phone&&'Tel: '+x.phone,x.email].filter(Boolean).join('\n')}`;
   const ls=(o.lines||[]).map(l=>`${l.desc} — ${num(l.qty)} ${l.unit} × ${eur(l.price)}${l.disc?` (−${l.disc}%)`:''} + IVA ${l.iva}% = ${eur(lb(l)*(1+(+l.iva||0)/100))}`).join('\n');
-  const txt=`${title}\nFecha: ${fdate(date)}${p.address?'\nObra: '+p.address:''}\n\n${party('EMISOR',iss)}\n\n${party('CLIENTE',cl)}\n\n${ls}\n\nBase imponible: ${eur(t.base)}\nIVA: ${eur(t.iva)}\nTOTAL: ${eur(t.total)}${iss.pay?'\n\n'+iss.pay:''}`;
-  const body=`Hola${cl.name?' '+cl.name:''},\n\nTe envío ${kind==='quote'?'el presupuesto':'la factura'} ${o.number||('v'+(o.version||''))}${p.address?' de la obra en '+p.address:''}.\n\n${ls}\n\nBase imponible: ${eur(t.base)}\nIVA: ${eur(t.iva)}\nTOTAL: ${eur(t.total)}${iss.pay?'\n\n'+iss.pay:''}\n\nUn saludo,\n${iss.name||''}`;
+  const txt=`${title}\nFecha: ${fdate(date)}${p.address?'\nObra: '+p.address:''}\n\n${party('EMISOR',iss)}\n\n${party('CLIENTE',cl)}\n\n${ls}\n\nBase imponible: ${eur(t.base)}\nIVA: ${eur(t.iva)}\nTOTAL: ${eur(t.total)}\n\nForma de pago: ${iss.pay||''}`;
+  const body=`Hola${cl.name?' '+cl.name:''},\n\nTe envío ${kind==='quote'?'el presupuesto':'la factura'} ${o.number||('v'+(o.version||''))}${p.address?' de la obra en '+p.address:''}.\n\n${ls}\n\nBase imponible: ${eur(t.base)}\nIVA: ${eur(t.iva)}\nTOTAL: ${eur(t.total)}\n\nForma de pago: ${iss.pay||''}\n\nUn saludo,\n${iss.name||''}`;
   const mail='mailto:'+encodeURIComponent(cl.email||'')+'?subject='+encodeURIComponent(title+(iss.name?' · '+iss.name:''))+'&body='+encodeURIComponent(body);
-  openModal(`<h2>${esc(title)}</h2>${iss.logo?`<img src="${iss.logo}" alt="Logotipo" style="max-height:70px;max-width:60%;display:block;margin-bottom:8px">`:''}<div class="card" style="white-space:pre-wrap;font-size:13px">${esc(txt)}</div><div class="acts"><button class="p" id="pdf">Descargar PDF</button><button id="cp">Copiar texto</button>${cl.email?`<a class="btn" href="${esc(mail)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir en correo</a>`:''}<button id="x">Cerrar</button></div>${cl.email?`<div class="mut">Destinatario: ${esc(cl.email)}. «Abrir en correo» prepara el mensaje en tu app de correo; tú lo envías.</div>`:'<div class="mut">Añade el email del cliente en el proyecto para preparar el correo.</div>'}`,(s,close)=>{
+  const fname=(kind==='quote'?`Presupuesto-v${o.version}`:`Factura-${o.number||'borrador'}`).replace(/[^\w\-.]+/g,'-')+'.pdf';
+  const blobP=buildPdf(kind,o).then(d=>d.output('blob')).catch(()=>null);
+  const subject=title+(iss.name?' · '+iss.name:'');
+  openModal(`<h2>${esc(title)}</h2>${iss.logo?`<img src="${iss.logo}" alt="Logotipo" style="max-height:70px;max-width:60%;display:block;margin-bottom:8px">`:''}<div class="card" style="white-space:pre-wrap;font-size:13px">${esc(txt)}</div><div class="acts"><button class="p" id="send">Enviar por correo con PDF</button><button id="pdf">Descargar PDF</button><button id="cp">Copiar texto</button><button id="x">Cerrar</button></div><div class="mut">${cl.email?`Destinatario: ${esc(cl.email)} (pégalo si tu app de correo no lo rellena). <a href="${esc(mail)}" target="_blank" rel="noopener">Abrir correo sin adjunto</a>.`:'Añade el email del cliente en el proyecto.'} El PDF se adjunta desde el menú de compartir del móvil: elige tu app de correo.</div>`,(s,close)=>{
     s.querySelector('#x').onclick=close;
-    s.querySelector('#pdf').onclick=()=>downloadPdf(kind,o);
+    s.querySelector('#pdf').onclick=async()=>{if(!dl)return toast('La descarga no está disponible aquí');const b=await blobP;if(!b)return toast('No se pudo generar el PDF');
+      try{await dl.save({filename:fname,data:b})}catch(e){if(e&&e.code!=='declined')toast('No se pudo descargar')}};
+    s.querySelector('#send').onclick=async()=>{
+      const b=await blobP;if(!b)return toast('No se pudo generar el PDF');
+      const file=new File([b],fname,{type:'application/pdf'});
+      try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:subject,text:body});return}}catch(e){if(e&&e.name==='AbortError')return}
+      if(dl){try{await dl.save({filename:fname,data:b});toast('PDF guardado: adjúntalo en el correo (enlace «sin adjunto» abajo)')}catch(e){if(!e||e.code!=='declined')toast('No se pudo preparar el PDF')}}
+      else toast('Este navegador no permite adjuntar el PDF');
+    };
     s.querySelector('#cp').onclick=async()=>{try{await navigator.clipboard.writeText(txt);toast('Copiado')}catch(e){toast('No se pudo copiar; selecciona el texto')}};
   });
 }
@@ -502,7 +513,7 @@ async function buildPdf(kind,o){
   y=d.lastAutoTable.finalY+8;if(y>245){d.addPage();y=20}
   d.setFontSize(10);[['Base imponible',t.base],['IVA',t.iva]].forEach(([k,v])=>{d.setFont('helvetica','normal');d.text(k,W-M-45,y);d.text(pm(eur(v)),W-M,y,{align:'right'});y+=6});
   d.setFont('helvetica','bold');d.setFontSize(12);d.text('TOTAL',W-M-45,y+1);d.text(pm(eur(t.total)),W-M,y+1,{align:'right'});y+=12;
-  const extra=note?'':[iss.pay,o.notes].filter(Boolean).join('\n\n');
+  const extra=note?'':'Forma de pago: '+(iss.pay||'')+(o.notes?'\n\n'+o.notes:'');
   if(extra){d.setFont('helvetica','normal');d.setFontSize(9);const ls=d.splitTextToSize(extra,W-2*M);if(y+ls.length*4.2>285){d.addPage();y=20}d.text(ls,M,y)}
   return d;
 }
