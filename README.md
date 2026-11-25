@@ -15,3 +15,8 @@ Los datos se guardan en el `localStorage` del navegador mediante `shim.js` (un s
 - Códigos de barras: usa JsBarcode (cdnjs) y ZXing (unpkg), cargados bajo demanda; requieren conexión.
 - Dictado por voz: solo existe dentro de Claude (navegador Chromium); fuera, el botón no aparece.
 - Siguiente paso para un uso real multidispositivo: sustituir `shim.js` por un backend (Supabase, Firebase, etc.) con la misma interfaz `collection/doc/set/delete/onSnapshot`.
+
+## Instalar como app en el móvil (PWA)
+Al servirse por HTTPS (por ejemplo GitHub Pages), Chrome ofrece «Instalar app» (menú ⋮ → «Instalar app» o «Añadir a pantalla de inicio»).
+Archivos: `manifest.webmanifest`, `sw.js` (caché sin conexión) e `icon-*.png`.
+Si cambias la app, sube versión en `CACHE` de `sw.js` (por ejemplo `gestion-obras-v2`).

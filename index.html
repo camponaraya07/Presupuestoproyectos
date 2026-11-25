@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f6f5c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Gestión de obras</title>
 <style>
 :root{--bg:#f5f5f2;--card:#fff;--tx:#1d1d1b;--mut:#6b6b66;--bd:#e2e1dc;--ac:#1f6f5c;--acx:#fff;--ok:#1f7a4d;--okb:#e1f3e8;--wa:#8a5a00;--wab:#fcefd2;--ba:#a12a2a;--bab:#fbe3e1;--ne:#555;--neb:#ecebe7}
@@ -48,6 +52,7 @@ input,select,textarea{font:inherit;width:100%;padding:8px;border:1px solid var(-
 <nav class="bot" id="nav"></nav>
 <div id="modal"></div>
 <script src="shim.js"></script>
+<script>if('serviceWorker' in navigator && location.protocol==='https:')addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
 <script>
 const COLS=['settings','projects','catalog','quotes','materials','notes','invoices','entries'];
 const state={};COLS.forEach(c=>state[c]=[]);
@@ -245,7 +250,7 @@ const paid=i=>(i.payments||[]).reduce((a,p)=>a+(+p.amount||0),0);
 /* ---------- vistas ---------- */
 function vProjects(){
   const ps=state.projects;
-  return `<div class="row"><h1>Proyectos</h1><div class="acts" style="margin:0"><button data-act="me">Mis datos</button><button data-act="logo">Logotipo</button><button class="p" data-act="newProj">+ Nuevo</button></div></div>${me().nif?'':'<div class="banner">Rellena «Mis datos» (nombre, NIF, dirección) para que aparezcan en presupuestos y facturas.</div>'}`+
+  return `<div class="row"><h1>Proyectos</h1><div class="acts" style="margin:0"><button data-act="me">Mis datos</button><button data-act="logo">Logotipo</button><button data-act="backup">Copia</button><button class="p" data-act="newProj">+ Nuevo</button></div></div>${me().nif?'':'<div class="banner">Rellena «Mis datos» (nombre, NIF, dirección) para que aparezcan en presupuestos y facturas.</div>'}`+
   (ps.length?ps.map(p=>{const q=state.quotes.find(x=>x.pid===p.id&&x.status==='accepted');return `<div class="card" data-act="openProj" data-id="${p.id}" style="cursor:pointer"><div class="row"><span class="b">${esc(p.name)}</span>${badge(p.status,PL)}</div><div class="mut">${esc(p.client)}${p.address?' · '+esc(p.address):''}</div>${q?`<div class="mut">Presupuesto aceptado: <b>${eur(tot(q.lines).total)}</b></div>`:''}</div>`}).join(''):'<div class="empty">Aún no hay proyectos. Crea el primero.</div>');
 }
 function vProject(p){
@@ -394,6 +399,24 @@ Object.assign(A,{
     await del('projects',p.id);view.pid=null;render();toast('Proyecto eliminado')},
   nPdf:d=>downloadPdf('note',by('notes',d.id)),
   labels:()=>{const its=catItems().filter(c=>c.code);const f=(view.q||'').trim();downloadLabels(its,'etiquetas-catalogo.pdf');if(f)toast(`Etiquetas de ${its.length} elemento(s) filtrados`)},
+  backup:()=>{
+    openModal(`<h2>Copia de seguridad</h2><p class="mut">Exporta todos tus datos (proyectos, catálogo, presupuestos, albaranes, facturas, contabilidad, tus datos y logotipo) a un archivo. Guárdalo en un sitio seguro.</p>
+    <div class="acts"><button class="p" id="ex">Exportar copia</button></div>
+    <label>Importar copia (.json)</label><input type="file" accept=".json,application/json" id="im">
+    <p class="mut">Al importar se añaden o sobrescriben los registros con el mismo identificador; no se borra nada de lo que ya tienes.</p><div class="mut" id="m"></div>
+    <div class="acts"><button id="x">Cerrar</button></div>`,(sh,close)=>{
+      sh.querySelector('#x').onclick=close;const m=sh.querySelector('#m');
+      sh.querySelector('#ex').onclick=async()=>{if(!dl)return toast('La descarga no está disponible aquí');
+        const data={};COLS.forEach(c=>data[c]=state[c]);
+        try{await dl.save({filename:`copia-gestion-obras-${today()}.json`,data:JSON.stringify({app:'gestion-obras',version:1,date:today(),data})})}catch(e){if(e&&e.code!=='declined')toast('No se pudo exportar')}};
+      sh.querySelector('#im').onchange=async e=>{const f=e.target.files[0];if(!f)return;let j;
+        try{j=JSON.parse(await f.text());if(j.app!=='gestion-obras'||!j.data)throw 0}catch(x){m.textContent='El archivo no es una copia válida.';return}
+        const n=COLS.reduce((a,c)=>a+(Array.isArray(j.data[c])?j.data[c].length:0),0);
+        if(!await confirmBox(`Se importarán ${n} registros (copia del ${j.date||'?'}). ¿Continuar?`,'Importar'))return;
+        m.textContent='Importando…';let k=0;
+        for(const c of COLS)for(const o of (Array.isArray(j.data[c])?j.data[c]:[])){if(o&&o.id){await put(c,o);k++}}
+        m.textContent=`Importados ${k} registros.`;toast('Copia importada')};
+    })},
   delCat:async d=>{if(await confirmBox('¿Borrar del catálogo? Las líneas ya creadas no cambian.','Borrar'))del('catalog',d.id)},
   newQuote:async()=>{const p=cp(),v=Math.max(0,...ofp('quotes',p.id).map(q=>q.version))+1;const q=await put('quotes',{pid:p.id,version:v,date:today(),status:'draft',lines:[],valid:'',notes:''});A.qLines({id:q.id},q)},
   qLines:(d,qq)=>{const q=qq||by('quotes',d.id);linesModal({title:`Presupuesto v${q.version}`,lines:q.lines,mode:'quote',pid:q.pid,onSave:L=>put('quotes',{...q,lines:L})})},
